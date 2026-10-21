@@ -26,6 +26,7 @@ set(DAEMON_SOURCES
     DisplayManager.cpp
     DisplayServer.cpp
     LogindDBusTypes.cpp
+    MultiseatSeatBackend.cpp
     Greeter.cpp
     PowerManager.cpp
     Seat.cpp
@@ -58,6 +59,7 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/data/interfaces/org.freedesktop
 qt_add_dbus_interface(DAEMON_SOURCES "${CMAKE_SOURCE_DIR}/data/interfaces/org.freedesktop.login1.Manager.xml"  "Login1Manager")
 qt_add_dbus_interface(DAEMON_SOURCES "${CMAKE_SOURCE_DIR}/data/interfaces/org.freedesktop.login1.Seat.xml"  "Login1Seat")
 qt_add_dbus_interface(DAEMON_SOURCES "${CMAKE_SOURCE_DIR}/data/interfaces/org.freedesktop.login1.Session.xml"  "Login1Session")
+qt_add_dbus_interface(DAEMON_SOURCES "${CMAKE_SOURCE_DIR}/data/interfaces/org.decoupling.multiseatd1.Manager.xml" "MultiseatManager")
 
 add_executable(sddm ${DAEMON_SOURCES})
 target_link_libraries(sddm

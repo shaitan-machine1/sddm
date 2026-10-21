@@ -47,6 +47,10 @@ OPTIONS
 	Default value is "x11".
 	For `x11-user` you might need to configure Xorg.wrap(1).
 
+`SeatBackend=`
+	Required seat discovery backend. Valid values are `logind` and
+	`multiseatd`. There is no automatic fallback and no default value.
+
 `HaltCommand=`
 	Halt command.
 	Default value is "@HALT_COMMAND@".

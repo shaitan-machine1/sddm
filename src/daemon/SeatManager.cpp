@@ -19,7 +19,9 @@
 
 #include "SeatManager.h"
 
+#include "Configuration.h"
 #include "DaemonApp.h"
+#include "MultiseatSeatBackend.h"
 #include "Seat.h"
 
 #include <QDBusConnection>
@@ -96,9 +98,27 @@ namespace SDDM {
     }
 
     void SeatManager::initialize() {
-        if (DaemonApp::instance()->testing() || !Logind::isAvailable()) {
-            //if we don't have logind/CK2, just create a single seat immediately and don't do any other connections
+        const QString backend = mainConfig.SeatBackend.get().toLower();
+        if (backend != QLatin1String("logind") && backend != QLatin1String("multiseatd"))
+            qFatal("General.SeatBackend is required and must be 'logind' or 'multiseatd'");
+
+        if (DaemonApp::instance()->testing()) {
             createSeat(QStringLiteral("seat0"));
+            return;
+        }
+
+        if (backend == QLatin1String("multiseatd")) {
+            m_multiseatBackend = new MultiseatSeatBackend(QDBusConnection::systemBus(), this);
+            connect(m_multiseatBackend, &MultiseatSeatBackend::seatAdded,
+                    this, &SeatManager::createSeat);
+            connect(m_multiseatBackend, &MultiseatSeatBackend::seatRemoved,
+                    this, &SeatManager::removeSeat);
+            m_multiseatBackend->start();
+            return;
+        }
+
+        if (!Logind::isAvailable()) {
+            qCritical() << "SeatBackend=logind was selected but logind is unavailable";
             return;
         }
 
@@ -121,6 +141,9 @@ namespace SDDM {
     }
 
     void SeatManager::createSeat(const QString &name) {
+        if (m_seats.contains(name))
+            return;
+
         // create a seat
         Seat *seat = new Seat(name, this);
 

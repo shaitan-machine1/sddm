@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.decoupling.multiseatd1.Manager">
+    <method name="ListSeats">
+      <arg name="seats" type="as" direction="out"/>
+    </method>
+    <signal name="SeatNew">
+      <arg name="seat" type="s"/>
+    </signal>
+    <signal name="SeatRemoved">
+      <arg name="seat" type="s"/>
+    </signal>
+  </interface>
+</node>

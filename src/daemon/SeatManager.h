@@ -27,6 +27,7 @@
 namespace SDDM {
     class Seat;
     class LogindSeat;
+    class MultiseatSeatBackend;
 
     class SeatManager : public QObject {
         Q_OBJECT
@@ -50,6 +51,7 @@ namespace SDDM {
     private:
         QHash<QString, Seat *> m_seats; //these will exist only for graphical seats
         QHash<QString, LogindSeat*> m_systemSeats; //these will exist for all seats
+        MultiseatSeatBackend *m_multiseatBackend { nullptr };
     };
 }
 
