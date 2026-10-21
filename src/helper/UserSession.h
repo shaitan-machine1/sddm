@@ -26,6 +26,8 @@
 #include <QtCore/QProcess>
 #include <QtCore/QTemporaryFile>
 
+#include "SeatConnection.h"
+
 namespace SDDM {
     class HelperApp;
     class XOrgUserHelper;
@@ -62,6 +64,7 @@ namespace SDDM {
 
     private:
         void setup();
+        bool prepareSeatConnection(QProcessEnvironment &env);
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         // Don't call it directly, it will be invoked by the child process only
@@ -69,6 +72,7 @@ namespace SDDM {
 #endif
 
         QString m_path { };
+        SeatConnection m_seatConnection;
         QTemporaryFile m_xauthFile;
         QString m_displayServerCmd;
 

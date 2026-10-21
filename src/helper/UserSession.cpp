@@ -25,6 +25,7 @@
 #include "Constants.h"
 #include "UserSession.h"
 #include "HelperApp.h"
+#include "SeatConnection.h"
 #include "VirtualTerminal.h"
 #include "XAuth.h"
 
@@ -58,6 +59,10 @@ namespace SDDM {
         QProcessEnvironment env = processEnvironment();
 
         bool isWaylandGreeter = false;
+
+        // Never leak an inherited or stale descriptor reference into a child.
+        env.remove(QString::fromLatin1(SeatConnection::environmentVariable()));
+        setProcessEnvironment(env);
 
         // If the Xorg display server was already started, write the passed
         // auth cookie to /tmp/xauth_XXXXXX. This is done in the parent process
@@ -113,6 +118,12 @@ namespace SDDM {
             QProcess::start();
 
         } else if (env.value(QStringLiteral("XDG_SESSION_TYPE")) == QLatin1String("wayland")) {
+            // Seat connections are minted late, immediately before the only
+            // child that is allowed to own the seat is started.
+            if (!prepareSeatConnection(env))
+                return false;
+            setProcessEnvironment(env);
+
             if (env.value(QStringLiteral("XDG_SESSION_CLASS")) == QLatin1String("greeter")) {
                 Q_ASSERT(!m_displayServerCmd.isEmpty());
                 setProgram(QStringLiteral(LIBEXEC_INSTALL_DIR "/sddm-helper-start-wayland"));
@@ -130,6 +141,10 @@ namespace SDDM {
         } else {
             qCritical() << "Unable to run user session: unknown session type";
         }
+
+        // Drop our copy so that seatd sees EOF once the compositor lineage is
+        // gone. The child cleared FD_CLOEXEC on its own copy before exec().
+        m_seatConnection.close();
 
         const bool started = waitForStarted();
         m_cachedProcessId = processId();
@@ -161,6 +176,26 @@ namespace SDDM {
         }
     }
 
+    bool UserSession::prepareSeatConnection(QProcessEnvironment &env)
+    {
+        if (mainConfig.SeatBackend.get().toLower() != QLatin1String("multiseatd"))
+            return true;
+
+        const QString seat = env.value(QStringLiteral("XDG_SEAT"));
+        const QString path = SeatConnection::socketPath(mainConfig.SeatdSocketDir.get(), seat);
+        if (path.isEmpty()) {
+            qCritical() << "No usable seatd socket for seat" << seat;
+            return false;
+        }
+
+        if (!m_seatConnection.open(path))
+            return false;
+
+        env.insert(QString::fromLatin1(SeatConnection::environmentVariable()),
+                   QString::number(m_seatConnection.fd()));
+        return true;
+    }
+
     QString UserSession::displayServerCommand() const
     {
         return m_displayServerCmd;
@@ -184,6 +219,12 @@ namespace SDDM {
 #else
     void UserSession::setupChildProcess() {
 #endif
+        // Hand the seat connection over to this child only.
+        if (m_seatConnection.isOpen() && !m_seatConnection.prepareForChild()) {
+            qCritical("Failed to pass the seat connection to the session: %s", strerror(errno));
+            _exit(Auth::HELPER_OTHER_ERROR);
+        }
+
         // Session type
         QString sessionType = processEnvironment().value(QStringLiteral("XDG_SESSION_TYPE"));
         QString sessionClass = processEnvironment().value(QStringLiteral("XDG_SESSION_CLASS"));

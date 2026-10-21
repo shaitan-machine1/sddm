@@ -51,6 +51,12 @@ OPTIONS
 	Required seat discovery backend. Valid values are `logind` and
 	`multiseatd`. There is no automatic fallback and no default value.
 
+`SeatdSocketDir=`
+	Directory holding the per-seat seatd sockets created by multiseatd.
+	Only used when `SeatBackend=multiseatd`. The socket of a seat is
+	`<SeatdSocketDir>/<seat>.sock` and is handed to Wayland compositors
+	through `SEATD_FD`.
+
 `HaltCommand=`
 	Halt command.
 	Default value is "@HALT_COMMAND@".

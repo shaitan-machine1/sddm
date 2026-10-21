@@ -31,6 +31,9 @@ class WaylandHelper : public QObject
 public:
     explicit WaylandHelper(QObject *parent = nullptr);
 
+    explicit WaylandHelper(QObject *parent, bool adoptSeatConnection);
+    ~WaylandHelper() override;
+
     bool startCompositor(const QString &cmd);
     void startGreeter(const QString &cmd);
     void stop();
@@ -39,7 +42,12 @@ Q_SIGNALS:
     void failed();
 
 private:
+    //! Closes our copy and keeps the descriptor away from the greeter.
+    void releaseSeatConnection();
+
     QProcessEnvironment m_environment;
+    int m_seatFd = -1;
+    bool m_seatConnectionUsable = true;
     QProcess *m_serverProcess = nullptr;
     QProcess *m_greeterProcess = nullptr;
     WaylandSocketWatcher * const m_watcher;

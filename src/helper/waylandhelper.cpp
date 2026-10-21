@@ -23,6 +23,7 @@
 
 #include "Configuration.h"
 
+#include "SeatConnection.h"
 #include "waylandhelper.h"
 #include "waylandsocketwatcher.h"
 #include "VirtualTerminal.h"
@@ -33,16 +34,62 @@
 namespace SDDM {
 
 WaylandHelper::WaylandHelper(QObject *parent)
+    : WaylandHelper(parent, true)
+{
+}
+
+WaylandHelper::WaylandHelper(QObject *parent, bool adoptSeatConnection)
     : QObject(parent)
     , m_environment(QProcessEnvironment::systemEnvironment())
     , m_watcher(new WaylandSocketWatcher(this))
 {
+    const QString variable = QString::fromLatin1(SeatConnection::environmentVariable());
+    if (!adoptSeatConnection || !m_environment.contains(variable))
+        return;
+
+    bool parsed = false;
+    const int fd = m_environment.value(variable).toInt(&parsed);
+    QString reason;
+    if (!parsed) {
+        reason = QStringLiteral("value is not a descriptor number");
+    } else if (SeatConnection::validateInherited(fd, &reason)) {
+        m_seatFd = fd;
+        return;
+    }
+
+    // The descriptor is only ever set by the root helper, so anything else
+    // means the session cannot be trusted with the seat.
+    qCritical() << "Ignoring the inherited seat connection:" << reason;
+    m_environment.remove(variable);
+    m_seatConnectionUsable = false;
+}
+
+WaylandHelper::~WaylandHelper()
+{
+    releaseSeatConnection();
 }
 
 bool WaylandHelper::startCompositor(const QString &cmd)
 {
+    if (!m_seatConnectionUsable)
+        return false;
+
     m_watcher->start();
-    return startProcess(cmd, &m_serverProcess);
+    const bool started = startProcess(cmd, &m_serverProcess);
+
+    // Only the compositor lineage keeps the seat connection; the greeter must
+    // inherit neither the descriptor nor its name.
+    releaseSeatConnection();
+    return started;
+}
+
+void WaylandHelper::releaseSeatConnection()
+{
+    m_environment.remove(QString::fromLatin1(SeatConnection::environmentVariable()));
+    if (m_seatFd < 0)
+        return;
+    ::close(m_seatFd);
+    m_seatFd = -1;
 }
 
 void stopProcess(QProcess *process)

@@ -13,6 +13,7 @@ set(HELPER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/common/SafeDataStream.cpp
     ${CMAKE_SOURCE_DIR}/src/common/XAuth.cpp
     ${CMAKE_SOURCE_DIR}/src/common/SignalHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/common/SeatConnection.cpp
     ${CMAKE_SOURCE_DIR}/src/auth/Auth.cpp
     ${CMAKE_SOURCE_DIR}/src/auth/AuthRequest.cpp
     ${CMAKE_SOURCE_DIR}/src/auth/AuthPrompt.cpp
@@ -60,7 +61,9 @@ endif (UTMPS_FOUND)
 
 install(TARGETS sddm-helper RUNTIME DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
 
-add_executable(sddm-helper-start-wayland HelperStartWayland.cpp waylandsocketwatcher.cpp waylandhelper.cpp ${CMAKE_SOURCE_DIR}/src/common/SignalHandler.cpp)
+add_executable(sddm-helper-start-wayland HelperStartWayland.cpp waylandsocketwatcher.cpp waylandhelper.cpp
+                                         ${CMAKE_SOURCE_DIR}/src/common/SeatConnection.cpp
+                                         ${CMAKE_SOURCE_DIR}/src/common/SignalHandler.cpp)
 target_link_libraries(sddm-helper-start-wayland Qt${QT_MAJOR_VERSION}::Core)
 install(TARGETS sddm-helper-start-wayland RUNTIME DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
 
