@@ -41,8 +41,6 @@ namespace SDDM {
         Entry(DisplayServer,       QString,     _S("x11"),                                      _S("Which display server should be used.\n"
                                                                                                    "Valid values are: x11, x11-user, wayland. Wayland support is experimental"));
         Entry(SeatBackend,         QString,     QString(),                                      _S("Seat discovery backend. Required; valid values are: logind, multiseatd"));
-        Entry(SeatdSocketDir,      QString,     _S("/run/multiseatd"),                          _S("Directory holding the per-seat seatd sockets created by multiseatd.\n"
-                                                                                                   "Only used when SeatBackend is multiseatd"));
         Entry(HaltCommand,         QString,     _S(HALT_COMMAND),                               _S("Halt command"));
         Entry(RebootCommand,       QString,     _S(REBOOT_COMMAND),                             _S("Reboot command"));
         Entry(Numlock,             NumState,    NUM_NONE,                                       _S("Initial NumLock state. Can be on, off or none.\n"

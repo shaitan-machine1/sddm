@@ -45,7 +45,16 @@ namespace SDDM {
         return m_name;
     }
 
+    void Seat::stop() {
+        m_stopping = true;
+        const auto displays = m_displays;
+        for (auto *display : displays)
+            removeDisplay(display);
+    }
+
     void Seat::createDisplay(Display::DisplayServerType serverType) {
+        if (m_stopping)
+            return;
         //reload config if needed
         mainConfig.load();
 
@@ -78,6 +87,8 @@ namespace SDDM {
     }
 
     void Seat::startDisplay(Display *display, int tryNr) {
+        if (m_stopping)
+            return;
         if (display->start())
             return;
 

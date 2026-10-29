@@ -51,11 +51,10 @@ OPTIONS
 	Required seat discovery backend. Valid values are `logind` and
 	`multiseatd`. There is no automatic fallback and no default value.
 
-`SeatdSocketDir=`
-	Directory holding the per-seat seatd sockets created by multiseatd.
-	Only used when `SeatBackend=multiseatd`. The socket of a seat is
-	`<SeatdSocketDir>/<seat>.sock` and is handed to Wayland compositors
-	through `SEATD_FD`.
+With `SeatBackend=multiseatd`, the root helper obtains a client FD through
+`CreateClient(seat, uid)` on system D-Bus. There is no seat socket-directory
+setting. Only the selected Wayland compositor lineage receives `SEATD_FD`;
+client cleanup uses the idempotent `RevokeClient` method.
 
 `HaltCommand=`
 	Halt command.

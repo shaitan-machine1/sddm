@@ -30,6 +30,7 @@
 #include "XAuth.h"
 
 #include <functional>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <errno.h>
@@ -48,7 +49,21 @@ namespace SDDM {
     UserSession::UserSession(HelperApp *parent)
         : QProcess(parent)
     {
-        connect(this, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &UserSession::finished);
+        connect(this, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+                [this](int code, QProcess::ExitStatus) {
+            if (m_seatLineage && m_cachedProcessId > 0) {
+                ::kill(-m_cachedProcessId, SIGTERM);
+                ::kill(-m_cachedProcessId, SIGKILL);
+            }
+            m_seatConnection.revoke();
+            m_seatLineage = false;
+            Q_EMIT finished(code);
+        });
+        connect(this, &QProcess::started, this, [this] { m_cachedProcessId = processId(); });
+        connect(this, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart)
+                m_seatConnection.revoke();
+        });
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         setChildProcessModifier(std::bind(&UserSession::childModifier, this));
 #endif
@@ -58,7 +73,10 @@ namespace SDDM {
         auto helper = qobject_cast<HelperApp*>(parent());
         QProcessEnvironment env = processEnvironment();
 
-        bool isWaylandGreeter = false;
+        if (!m_seatConnection.revoke())
+            return false;
+        m_seatLineage = false;
+        m_cachedProcessId = -1;
 
         // Never leak an inherited or stale descriptor reference into a child.
         env.remove(QString::fromLatin1(SeatConnection::environmentVariable()));
@@ -129,7 +147,6 @@ namespace SDDM {
                 setProgram(QStringLiteral(LIBEXEC_INSTALL_DIR "/sddm-helper-start-wayland"));
                 setArguments({m_displayServerCmd, m_path});
                 QProcess::start();
-                isWaylandGreeter = true;
             } else {
                 setProgram(mainConfig.Wayland.SessionCommand.get());
                 setArguments(QStringList{m_path});
@@ -144,28 +161,41 @@ namespace SDDM {
 
         // Drop our copy so that seatd sees EOF once the compositor lineage is
         // gone. The child cleared FD_CLOEXEC on its own copy before exec().
-        m_seatConnection.close();
+        m_seatConnection.closeFd();
 
         const bool started = waitForStarted();
         m_cachedProcessId = processId();
         if (started) {
             return true;
-        } else if (isWaylandGreeter) {
-            // This is probably fine, we need the compositor to start first
-            return true;
         }
-
+        m_seatConnection.revoke();
         return false;
+    }
+
+    UserSession::~UserSession()
+    {
+        if (state() != QProcess::NotRunning)
+            stop();
+        m_seatConnection.revoke();
     }
 
     void UserSession::stop()
     {
+        // Revoke before waiting: Auth::stop can kill this helper after five
+        // seconds, so D-Bus cleanup must not depend on child cooperation.
+        if (m_seatLineage && m_cachedProcessId > 0) {
+            ::kill(-m_cachedProcessId, SIGTERM);
+            ::kill(-m_cachedProcessId, SIGKILL);
+        }
+        m_seatConnection.revoke();
         if (state() != QProcess::NotRunning) {
             terminate();
             const bool isGreeter = processEnvironment().value(QStringLiteral("XDG_SESSION_CLASS")) == QLatin1String("greeter");
 
             // Wait longer for a session than a greeter
             if (!waitForFinished(isGreeter ? 5000 : 60000)) {
+                if (m_seatLineage && m_cachedProcessId > 0)
+                    ::kill(-m_cachedProcessId, SIGKILL);
                 kill();
                 if (!waitForFinished(5000)) {
                     qWarning() << "Could not fully finish the process" << program();
@@ -182,15 +212,12 @@ namespace SDDM {
             return true;
 
         const QString seat = env.value(QStringLiteral("XDG_SEAT"));
-        const QString path = SeatConnection::socketPath(mainConfig.SeatdSocketDir.get(), seat);
-        if (path.isEmpty()) {
-            qCritical() << "No usable seatd socket for seat" << seat;
-            return false;
-        }
-
-        if (!m_seatConnection.open(path))
+        const QString username = qobject_cast<HelperApp *>(parent())->user();
+        if (!m_seatConnection.createForUser(seat, username))
             return false;
 
+        m_seatLineage = true;
+        env.insert(QStringLiteral("LIBSEAT_BACKEND"), QStringLiteral("seatd"));
         env.insert(QString::fromLatin1(SeatConnection::environmentVariable()),
                    QString::number(m_seatConnection.fd()));
         return true;

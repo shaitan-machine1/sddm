@@ -21,27 +21,38 @@
 #define SDDM_SEATCONNECTION_H
 
 #include <QString>
+#include <QDBusConnection>
+#include <QDBusError>
 
 namespace SDDM {
     /*!
-     * Owns one connected seatd client socket.
+     * Move-only ownership of a D-Bus-created client ID and seatd endpoint.
      *
      * The descriptor is opened close-on-exec, so it is only inherited by
      * children that explicitly call prepareForChild() between fork() and
      * exec(). The owner closes its copy once the child has been started so
-     * that seatd observes EOF when the compositor lineage dies.
+     * that seatd observes EOF when the compositor lineage dies. Explicit
+     * revocation ownership survives closing the parent descriptor.
      */
     class SeatConnection {
     public:
-        SeatConnection() = default;
+        explicit SeatConnection(const QDBusConnection &bus = QDBusConnection::systemBus());
+        SeatConnection(SeatConnection &&other) noexcept;
+        SeatConnection &operator=(SeatConnection &&other) noexcept;
         ~SeatConnection();
 
         SeatConnection(const SeatConnection &) = delete;
         SeatConnection &operator=(const SeatConnection &) = delete;
 
-        //! Connects to socketPath, replacing any previously held descriptor.
-        bool open(const QString &socketPath);
-        void close();
+        //! Root helper resolves the authenticated target user before creation.
+        bool createForUser(const QString &seat, const QString &username);
+        bool create(const QString &seat, uint uid);
+        //! Close the parent's FD after fork without ending explicit cleanup ownership.
+        void closeFd();
+        //! Idempotent explicit cleanup, also attempted by the destructor.
+        bool revoke();
+        static bool revocationIsAlreadyComplete(const QDBusError &error);
+        QString clientId() const { return m_clientId; }
 
         bool isOpen() const { return m_fd >= 0; }
         int fd() const { return m_fd; }
@@ -52,10 +63,7 @@ namespace SDDM {
          */
         bool prepareForChild() const;
 
-        //! Seat names are used to build socket paths, so keep them strict.
         static bool isValidSeatName(const QString &seat);
-        //! Empty on invalid input.
-        static QString socketPath(const QString &directory, const QString &seat);
 
         /*!
          * Validates a descriptor inherited through SEATD_FD. Returns false and
@@ -67,6 +75,9 @@ namespace SDDM {
         static const char *environmentVariable();
 
     private:
+        QDBusConnection m_bus;
+        QString m_clientId;
+        bool m_needsRevoke { false };
         int m_fd { -1 };
     };
 }

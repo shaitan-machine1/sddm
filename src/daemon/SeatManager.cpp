@@ -162,7 +162,9 @@ namespace SDDM {
         // remove from the list
         Seat *seat = m_seats.take(name);
 
-        // delete seat
+        // Stop compositor/helper lineages now, before deferred QObject deletion.
+        // Seat::stop suppresses display restart while the seat is unavailable.
+        seat->stop();
         seat->deleteLater();
 
         // emit signal

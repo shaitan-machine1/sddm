@@ -20,16 +20,17 @@ target_include_directories(SessionTest PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/../sr
 add_test(NAME Session COMMAND SessionTest)
 target_link_libraries(SessionTest Qt${QT_MAJOR_VERSION}::Core Qt${QT_MAJOR_VERSION}::Test)
 
-set(SeatConnectionTest_SRCS SeatConnectionTest.cpp ../src/common/SeatConnection.cpp)
+qt_add_dbus_interface(TEST_SEAT_DBUS_SOURCES
+    "${CMAKE_SOURCE_DIR}/data/interfaces/org.decoupling.multiseatd1.Manager.xml" "MultiseatManager")
+set(SeatConnectionTest_SRCS SeatConnectionTest.cpp ../src/common/SeatConnection.cpp ${TEST_SEAT_DBUS_SOURCES})
 add_executable(SeatConnectionTest ${SeatConnectionTest_SRCS})
-add_test(NAME SeatConnection COMMAND SeatConnectionTest)
-target_link_libraries(SeatConnectionTest Qt${QT_MAJOR_VERSION}::Core Qt${QT_MAJOR_VERSION}::Test)
+target_include_directories(SeatConnectionTest PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(SeatConnectionTest Qt${QT_MAJOR_VERSION}::Core Qt${QT_MAJOR_VERSION}::DBus Qt${QT_MAJOR_VERSION}::Test)
 
 find_program(DBUS_RUN_SESSION dbus-run-session)
 if(DBUS_RUN_SESSION)
-    set(MultiseatSeatBackendTest_SRCS MultiseatSeatBackendTest.cpp ../src/daemon/MultiseatSeatBackend.cpp)
-    qt_add_dbus_interface(MultiseatSeatBackendTest_SRCS
-        "${CMAKE_SOURCE_DIR}/data/interfaces/org.decoupling.multiseatd1.Manager.xml" "MultiseatManager")
+    add_test(NAME SeatConnection COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:SeatConnectionTest>)
+    set(MultiseatSeatBackendTest_SRCS MultiseatSeatBackendTest.cpp ../src/daemon/MultiseatSeatBackend.cpp ${TEST_SEAT_DBUS_SOURCES})
     add_executable(MultiseatSeatBackendTest ${MultiseatSeatBackendTest_SRCS})
     target_include_directories(MultiseatSeatBackendTest PRIVATE ../src/daemon ${CMAKE_CURRENT_BINARY_DIR})
     target_link_libraries(MultiseatSeatBackendTest

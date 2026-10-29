@@ -20,6 +20,7 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QStandardPaths>
+#include <QTimer>
 
 #include "Configuration.h"
 
@@ -33,6 +34,27 @@
 
 namespace SDDM {
 
+class SeatCompositorProcess : public QProcess {
+public:
+    SeatCompositorProcess(int fd, QObject *parent) : QProcess(parent), m_fd(fd) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        setChildProcessModifier([fd] { passDescriptor(fd); });
+#endif
+    }
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+protected:
+    void setupChildProcess() override { passDescriptor(m_fd); }
+#endif
+private:
+    static void passDescriptor(int fd) {
+        if (fd < 0) return;
+        const int flags = ::fcntl(fd, F_GETFD);
+        if (flags < 0 || ::fcntl(fd, F_SETFD, flags & ~FD_CLOEXEC) < 0)
+            _exit(127);
+    }
+    int m_fd;
+};
+
 WaylandHelper::WaylandHelper(QObject *parent)
     : WaylandHelper(parent, true)
 {
@@ -44,17 +66,24 @@ WaylandHelper::WaylandHelper(QObject *parent, bool adoptSeatConnection)
     , m_watcher(new WaylandSocketWatcher(this))
 {
     const QString variable = QString::fromLatin1(SeatConnection::environmentVariable());
-    if (!adoptSeatConnection || !m_environment.contains(variable))
+    const QString inherited = m_environment.value(variable);
+    m_environment.remove(variable);
+    if (!adoptSeatConnection || inherited.isEmpty())
         return;
 
     bool parsed = false;
-    const int fd = m_environment.value(variable).toInt(&parsed);
+    const int fd = inherited.toInt(&parsed);
     QString reason;
     if (!parsed) {
         reason = QStringLiteral("value is not a descriptor number");
     } else if (SeatConnection::validateInherited(fd, &reason)) {
-        m_seatFd = fd;
-        return;
+        const int flags = ::fcntl(fd, F_GETFD);
+        if (flags >= 0 && ::fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0) {
+            m_seatFd = fd;
+            return;
+        }
+        ::close(fd);
+        reason = QStringLiteral("cannot protect inherited descriptor with CLOEXEC");
     }
 
     // The descriptor is only ever set by the root helper, so anything else
@@ -115,8 +144,11 @@ void WaylandHelper::stop()
 
 bool WaylandHelper::startProcess(const QString &cmd, QProcess **p)
 {
-    auto *process = new QProcess(this);
-    process->setProcessEnvironment(m_environment);
+    auto *process = new SeatCompositorProcess(m_seatFd, this);
+    auto environment = m_environment;
+    if (m_seatFd >= 0)
+        environment.insert(QString::fromLatin1(SeatConnection::environmentVariable()), QString::number(m_seatFd));
+    process->setProcessEnvironment(environment);
     process->setInputChannelMode(QProcess::ForwardedInputChannel);
     connect(process, &QProcess::readyReadStandardError, this, [process] {
         qWarning() << process->readAllStandardError();
@@ -128,11 +160,14 @@ bool WaylandHelper::startProcess(const QString &cmd, QProcess **p)
     connect(process, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             process, [](int exitCode, QProcess::ExitStatus exitStatus) {
         qDebug() << "wayland compositor finished" << exitCode << exitStatus;
-        if (exitCode != 0 || exitStatus != QProcess::NormalExit)
-            QCoreApplication::instance()->quit();
+        // Normal compositor exit also ends the greeter lineage. Queue this
+        // so a fast exit before app.exec() is not lost.
+        QTimer::singleShot(0, QCoreApplication::instance(), &QCoreApplication::quit);
     });
 
     auto args = QProcess::splitCommand(cmd);
+    if (args.isEmpty())
+        return false;
     const auto program = args.takeFirst();
     process->start(program, args);
     if (!process->waitForStarted(10000)) {

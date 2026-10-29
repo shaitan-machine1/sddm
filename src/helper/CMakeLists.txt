@@ -5,7 +5,9 @@ include_directories(
     "${CMAKE_SOURCE_DIR}/src/auth"
     ${LIBXAU_INCLUDE_DIRS}
 )
-include_directories("${CMAKE_BINARY_DIR}/src/common")
+include_directories("${CMAKE_BINARY_DIR}/src/common" "${CMAKE_CURRENT_BINARY_DIR}")
+qt_add_dbus_interface(SEAT_DBUS_SOURCES
+    "${CMAKE_SOURCE_DIR}/data/interfaces/org.decoupling.multiseatd1.Manager.xml" "MultiseatManager")
 
 set(HELPER_SOURCES
     ${CMAKE_SOURCE_DIR}/src/common/Configuration.cpp
@@ -30,7 +32,7 @@ set(HELPER_SOURCES
     backend/PamBackend.cpp
 )
 
-add_executable(sddm-helper ${HELPER_SOURCES})
+add_executable(sddm-helper ${HELPER_SOURCES} ${SEAT_DBUS_SOURCES})
 target_link_libraries(sddm-helper
                       Qt${QT_MAJOR_VERSION}::Network
                       Qt${QT_MAJOR_VERSION}::DBus
@@ -63,8 +65,8 @@ install(TARGETS sddm-helper RUNTIME DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
 
 add_executable(sddm-helper-start-wayland HelperStartWayland.cpp waylandsocketwatcher.cpp waylandhelper.cpp
                                          ${CMAKE_SOURCE_DIR}/src/common/SeatConnection.cpp
-                                         ${CMAKE_SOURCE_DIR}/src/common/SignalHandler.cpp)
-target_link_libraries(sddm-helper-start-wayland Qt${QT_MAJOR_VERSION}::Core)
+                                         ${CMAKE_SOURCE_DIR}/src/common/SignalHandler.cpp ${SEAT_DBUS_SOURCES})
+target_link_libraries(sddm-helper-start-wayland Qt${QT_MAJOR_VERSION}::Core Qt${QT_MAJOR_VERSION}::DBus)
 install(TARGETS sddm-helper-start-wayland RUNTIME DESTINATION "${CMAKE_INSTALL_LIBEXECDIR}")
 
 add_executable(sddm-helper-start-x11user HelperStartX11User.cpp xorguserhelper.cpp

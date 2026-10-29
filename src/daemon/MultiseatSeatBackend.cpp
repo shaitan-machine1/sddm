@@ -47,11 +47,10 @@ void MultiseatSeatBackend::serviceOwnerChanged(const QString &service,
                                                 const QString &newOwner)
 {
     Q_UNUSED(service)
-    Q_UNUSED(oldOwner)
     ++m_generation;
-    if (newOwner.isEmpty())
+    if (!oldOwner.isEmpty())
         clear();
-    else
+    if (!newOwner.isEmpty())
         refresh();
 }
 

@@ -37,6 +37,7 @@ namespace SDDM {
         Q_OBJECT
     public:
         explicit UserSession(HelperApp *parent);
+        ~UserSession() override;
 
         bool start();
         void stop();
@@ -73,6 +74,7 @@ namespace SDDM {
 
         QString m_path { };
         SeatConnection m_seatConnection;
+        bool m_seatLineage = false;
         QTemporaryFile m_xauthFile;
         QString m_displayServerCmd;
 

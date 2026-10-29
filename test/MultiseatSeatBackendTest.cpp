@@ -2,6 +2,7 @@
 
 #include <QDBusConnection>
 #include <QSignalSpy>
+#include <QProcess>
 #include <QtTest>
 
 namespace {
@@ -39,19 +40,29 @@ private Q_SLOTS:
                                    QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals));
         QVERIFY(bus.registerService(serviceName));
 
+        QProcess display0, display1;
         SDDM::MultiseatSeatBackend backend(bus);
+        connect(&backend, &SDDM::MultiseatSeatBackend::seatRemoved, &backend, [&](const QString &seat) {
+            // Display consumer: only the removed seat's compositor is stopped.
+            if (seat == QLatin1String("seat0")) display0.terminate();
+            if (seat == QLatin1String("seat1")) display1.terminate();
+        });
         QSignalSpy added(&backend, &SDDM::MultiseatSeatBackend::seatAdded);
         QSignalSpy removed(&backend, &SDDM::MultiseatSeatBackend::seatRemoved);
         backend.start();
 
         QTRY_COMPARE(added.count(), 1);
         QCOMPARE(added.at(0).at(0).toString(), QStringLiteral("seat0"));
+        display0.start(QStringLiteral("/bin/sleep"), {QStringLiteral("30")});
+        QVERIFY(display0.waitForStarted());
 
         // New seats arrive through signals.
         manager.seats.append(QStringLiteral("seat1"));
         Q_EMIT manager.SeatNew(QStringLiteral("seat1"));
         QTRY_COMPARE(added.count(), 2);
         QCOMPARE(added.at(1).at(0).toString(), QStringLiteral("seat1"));
+        display1.start(QStringLiteral("/bin/sleep"), {QStringLiteral("30")});
+        QVERIFY(display1.waitForStarted());
 
         // Duplicate and unknown notifications are ignored.
         Q_EMIT manager.SeatNew(QStringLiteral("seat1"));
@@ -65,11 +76,14 @@ private Q_SLOTS:
         Q_EMIT manager.SeatRemoved(QStringLiteral("seat1"));
         QTRY_COMPARE(removed.count(), 1);
         QCOMPARE(removed.at(0).at(0).toString(), QStringLiteral("seat1"));
+        QTRY_COMPARE(display1.state(), QProcess::NotRunning);
+        QCOMPARE(display0.state(), QProcess::Running);
 
         // Losing the owner removes every known seat.
         QVERIFY(bus.unregisterService(serviceName));
         QTRY_COMPARE(removed.count(), 2);
         QCOMPARE(removed.at(1).at(0).toString(), QStringLiteral("seat0"));
+        QTRY_COMPARE(display0.state(), QProcess::NotRunning);
 
         // A new owner is relisted, including seats that disappeared meanwhile.
         manager.seats = { QStringLiteral("seat2") };

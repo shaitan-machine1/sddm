@@ -36,6 +36,7 @@ namespace SDDM {
         const QString &name() const;
         void createDisplay(Display::DisplayServerType serverType);
         bool canTTY();
+        void stop();
 
     public slots:
         void removeDisplay(SDDM::Display* display);
@@ -47,6 +48,7 @@ namespace SDDM {
         void startDisplay(SDDM::Display *display, int tryNr = 1);
 
         QString m_name;
+        bool m_stopping = false;
 
         QVector<Display *> m_displays;
     };

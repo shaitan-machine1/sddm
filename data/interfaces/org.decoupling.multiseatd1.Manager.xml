@@ -6,6 +6,15 @@
     <method name="ListSeats">
       <arg name="seats" type="as" direction="out"/>
     </method>
+    <method name="CreateClient">
+      <arg name="seat_name" type="s" direction="in"/>
+      <arg name="uid" type="u" direction="in"/>
+      <arg name="client_id" type="s" direction="out"/>
+      <arg name="fd" type="h" direction="out"/>
+    </method>
+    <method name="RevokeClient">
+      <arg name="client_id" type="s" direction="in"/>
+    </method>
     <signal name="SeatNew">
       <arg name="seat" type="s"/>
     </signal>
