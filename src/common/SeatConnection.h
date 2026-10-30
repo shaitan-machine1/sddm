@@ -23,6 +23,7 @@
 #include <QString>
 #include <QDBusConnection>
 #include <QDBusError>
+#include <optional>
 
 namespace SDDM {
     /*!
@@ -36,7 +37,9 @@ namespace SDDM {
      */
     class SeatConnection {
     public:
-        explicit SeatConnection(const QDBusConnection &bus = QDBusConnection::systemBus());
+        //! Defer system-bus threads until create(), after PAM credential setup.
+        SeatConnection() = default;
+        explicit SeatConnection(const QDBusConnection &bus);
         SeatConnection(SeatConnection &&other) noexcept;
         SeatConnection &operator=(SeatConnection &&other) noexcept;
         ~SeatConnection();
@@ -75,7 +78,7 @@ namespace SDDM {
         static const char *environmentVariable();
 
     private:
-        QDBusConnection m_bus;
+        std::optional<QDBusConnection> m_bus;
         QString m_clientId;
         bool m_needsRevoke { false };
         int m_fd { -1 };

@@ -5,6 +5,7 @@
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusUnixFileDescriptor>
+#include <QDir>
 #include <QSocketNotifier>
 #include <QProcess>
 #include <cstdio>
@@ -86,6 +87,21 @@ private Q_SLOTS:
     void init() {
         QDBusInterface proxy(service, path, interface, QDBusConnection::sessionBus());
         QVERIFY(proxy.call(QStringLiteral("Reset")).type() != QDBusMessage::ErrorMessage);
+    }
+    void defaultConstructionDoesNotStartDBusBeforePam() {
+        QProcess probe;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        // A regressed constructor must never contact the live system bus.
+        environment.insert(QStringLiteral("DBUS_SYSTEM_BUS_ADDRESS"),
+                           environment.value(QStringLiteral("DBUS_SESSION_BUS_ADDRESS")));
+        probe.setProcessEnvironment(environment);
+        probe.start(QCoreApplication::applicationFilePath(), {QStringLiteral("--construction-probe")});
+        QVERIFY(probe.waitForStarted());
+        QVERIFY(probe.waitForFinished(5000));
+        if (probe.exitCode() == 77)
+            QSKIP("thread-count probe needs Linux procfs");
+        QCOMPARE(probe.exitStatus(), QProcess::NormalExit);
+        QVERIFY2(probe.exitCode() == 0, probe.readAllStandardError().constData());
     }
     void validatesSeatNames() {
         for (const auto &seat : {QStringLiteral("seat0"), QStringLiteral("seat-usb_1")})
@@ -218,6 +234,25 @@ int main(int argc, char **argv) {
         return matches == (std::strcmp(argv[4], "yes") == 0 ? 1 : 0) ? 0 : 1;
     }
     QCoreApplication app(argc, argv);
+    if (app.arguments().contains(QStringLiteral("--construction-probe"))) {
+        const QDir tasks(QStringLiteral("/proc/self/task"));
+        if (!tasks.exists())
+            return 77;
+        const auto before = tasks.entryList(QDir::Dirs | QDir::NoDotAndDotDot).size();
+        {
+            SeatConnection connection;
+            SeatConnection moved(std::move(connection));
+            SeatConnection replacement;
+            replacement = std::move(moved);
+            if (replacement.isOpen() || !replacement.revoke())
+                return 1;
+        }
+        if (tasks.entryList(QDir::Dirs | QDir::NoDotAndDotDot).size() != before) {
+            std::fputs("default seat connection started a D-Bus thread before PAM\n", stderr);
+            return 1;
+        }
+        return 0;
+    }
     if (app.arguments().contains(QStringLiteral("--fake-manager"))) {
         FakeClientManager manager;
         auto bus = QDBusConnection::sessionBus();

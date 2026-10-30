@@ -95,8 +95,12 @@ namespace SDDM {
     {
         if (!revoke() || !isValidSeatName(seat))
             return false;
+        // UserSession exists before PAM runs. Starting Qt's D-Bus worker in
+        // its constructor races PAM modules' process-wide credential changes.
+        if (!m_bus)
+            m_bus.emplace(QDBusConnection::systemBus());
         OrgDecouplingMultiseatd1ManagerInterface proxy(QStringLiteral("org.decoupling.multiseatd1"),
-            QStringLiteral("/org/decoupling/multiseatd1"), m_bus);
+            QStringLiteral("/org/decoupling/multiseatd1"), *m_bus);
         proxy.setTimeout(2000);
         QDBusPendingReply<QString, QDBusUnixFileDescriptor> reply = proxy.CreateClient(seat, uid);
         reply.waitForFinished();
@@ -128,7 +132,7 @@ namespace SDDM {
         if (!m_needsRevoke)
             return true;
         OrgDecouplingMultiseatd1ManagerInterface proxy(QStringLiteral("org.decoupling.multiseatd1"),
-            QStringLiteral("/org/decoupling/multiseatd1"), m_bus);
+            QStringLiteral("/org/decoupling/multiseatd1"), *m_bus);
         proxy.setTimeout(2000);
         QDBusPendingReply<> reply = proxy.RevokeClient(m_clientId);
         reply.waitForFinished();
