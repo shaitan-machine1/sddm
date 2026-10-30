@@ -19,7 +19,7 @@
 
 #include <QCoreApplication>
 #include <QFile>
-#include <QStandardPaths>
+#include <QDir>
 #include <QTimer>
 
 #include "Configuration.h"
@@ -63,8 +63,15 @@ WaylandHelper::WaylandHelper(QObject *parent)
 WaylandHelper::WaylandHelper(QObject *parent, bool adoptSeatConnection)
     : QObject(parent)
     , m_environment(QProcessEnvironment::systemEnvironment())
-    , m_watcher(new WaylandSocketWatcher(this))
+    , m_runtimeDir(QDir::tempPath() + QStringLiteral("/sddm-wayland-XXXXXX"))
+    , m_watcher(new WaylandSocketWatcher(m_runtimeDir.path(), this))
 {
+    if (!m_runtimeDir.isValid()) {
+        qCritical() << "Cannot create private Wayland runtime:" << m_runtimeDir.errorString();
+        m_seatConnectionUsable = false;
+    } else {
+        m_environment.insert(QStringLiteral("XDG_RUNTIME_DIR"), m_runtimeDir.path());
+    }
     const QString variable = QString::fromLatin1(SeatConnection::environmentVariable());
     const QString inherited = m_environment.value(variable);
     m_environment.remove(variable);
@@ -95,6 +102,7 @@ WaylandHelper::WaylandHelper(QObject *parent, bool adoptSeatConnection)
 
 WaylandHelper::~WaylandHelper()
 {
+    stop();
     releaseSeatConnection();
 }
 
@@ -121,7 +129,7 @@ void WaylandHelper::releaseSeatConnection()
     m_seatFd = -1;
 }
 
-void stopProcess(QProcess *process)
+void stopProcess(QProcess *&process)
 {
     if (process && process->state() != QProcess::NotRunning) {
         qInfo() << "Stopping..." << process->program();

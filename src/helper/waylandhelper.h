@@ -21,6 +21,7 @@
 #define WAYLANDHELPER_H
 
 #include <QProcess>
+#include <QTemporaryDir>
 
 namespace SDDM {
 class WaylandSocketWatcher;
@@ -46,6 +47,9 @@ private:
     void releaseSeatConnection();
 
     QProcessEnvironment m_environment;
+    // Same-UID greeters must never discover another compositor's socket or
+    // lose their runtime when a different greeter's PAM session closes.
+    QTemporaryDir m_runtimeDir;
     int m_seatFd = -1;
     bool m_seatConnectionUsable = true;
     QProcess *m_serverProcess = nullptr;

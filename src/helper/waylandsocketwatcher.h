@@ -38,7 +38,7 @@ public:
     };
     Q_ENUM(Status)
 
-    explicit WaylandSocketWatcher(QObject *parent = nullptr);
+    explicit WaylandSocketWatcher(const QString &runtimeDir, QObject *parent = nullptr);
 
     Status status() const;
     QString socketName() const;

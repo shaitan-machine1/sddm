@@ -20,15 +20,14 @@
 
 #include <unistd.h>
 #include <QDebug>
-#include <QStandardPaths>
 
 #include "waylandsocketwatcher.h"
 
 namespace SDDM {
 
-WaylandSocketWatcher::WaylandSocketWatcher(QObject *parent )
+WaylandSocketWatcher::WaylandSocketWatcher(const QString &runtimeDir, QObject *parent)
     : QObject(parent)
-    , m_runtimeDir(QDir(QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation)))
+    , m_runtimeDir(runtimeDir)
 {
     m_runtimeDir.setFilter(QDir::Files | QDir::System);
     m_runtimeDir.setNameFilters(QStringList() << QLatin1String("wayland-?"));
